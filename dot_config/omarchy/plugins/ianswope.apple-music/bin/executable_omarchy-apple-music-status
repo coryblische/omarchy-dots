@@ -1,0 +1,79 @@
+#!/bin/bash
+# Report the Apple Music browser instance and the MPRIS name it owns.
+#
+# The point of this script is the pid mapping. A Chromium-family browser
+# publishes one MPRIS player per browser *process*, covering every tab, and
+# exposes no xesam:url. So "the chromium player" on the bus is whatever the
+# browser happens to be playing, which is why a generic media widget cannot
+# tell Apple Music from a YouTube tab.
+#
+# Running Apple Music in its own --user-data-dir gives it its own browser
+# process, hence its own bus name. Matching the bus name's owning pid against
+# the process that owns our profile identifies that player exactly, with no
+# reliance on the instance<pid> naming convention and no state file.
+
+set -uo pipefail
+
+PROFILE="${OMARCHY_APPLE_MUSIC_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/ianswope.apple-music/profile}"
+
+die() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+command -v jq >/dev/null 2>&1 || die "jq is required"
+# Without busctl the bus name is never found, and the plugin would report a
+# running browser that never plays anything. Better to say why.
+command -v busctl >/dev/null 2>&1 || die "busctl is required"
+
+# Chrome rewrites its own argv, so /proc/<pid>/cmdline arrives space-joined
+# rather than NUL-separated. Both layouts are normalised to spaces and matched
+# as delimited substrings; a profile path containing whitespace would make that
+# ambiguous, so it is refused rather than silently mismatched.
+case $PROFILE in
+*[[:space:]]*) die "profile path must not contain whitespace: $PROFILE" ;;
+esac
+
+# The browser process for our profile carries --user-data-dir and, unlike the
+# renderer, gpu and zygote children that inherit the flag, no --type=.
+browser_pid() {
+  local pid cmd
+  for pid in /proc/[0-9]*; do
+    pid=${pid#/proc/}
+    # Processes come and go between the glob and the read, and a failed input
+    # redirection is reported by the shell rather than by tr, so the whole group
+    # is silenced. Otherwise every exiting process prints to stderr.
+    cmd=$({ tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null) || continue
+    [[ -n $cmd ]] || continue
+    cmd=" $cmd "
+    [[ $cmd == *" --user-data-dir=$PROFILE "* ]] || continue
+    [[ $cmd == *" --type="* ]] && continue
+    printf '%s\n' "$pid"
+    return 0
+  done
+  return 1
+}
+
+# The MPRIS name owned by that pid. Column 2 of busctl list is the owner pid,
+# so the player is identified by ownership rather than by parsing the name,
+# which keeps this correct for Chrome, Brave or Chromium alike.
+mpris_name_for_pid() {
+  local want=$1
+  busctl --user list --no-pager --no-legend 2>/dev/null |
+    awk -v want="$want" '$1 ~ /^org\.mpris\.MediaPlayer2\./ && $2 == want { print $1; exit }'
+}
+
+pid=$(browser_pid) || pid=""
+bus=""
+[[ -n $pid ]] && bus=$(mpris_name_for_pid "$pid")
+
+jq -n \
+  --arg profile "$PROFILE" \
+  --arg pid "$pid" \
+  --arg bus "$bus" \
+  '{
+     running: ($pid != ""),
+     pid: (if $pid == "" then null else ($pid | tonumber) end),
+     bus: (if $bus == "" then null else $bus end),
+     profile: $profile
+   }'

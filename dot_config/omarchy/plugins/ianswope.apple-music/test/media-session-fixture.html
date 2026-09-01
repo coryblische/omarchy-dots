@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MPRIS fixture</title>
+  <style>
+    body { background: #14141a; color: #e8e4d9; font: 14px monospace; padding: 2rem; line-height: 1.6; }
+    code { color: #9fd08a; }
+    h1 { font-size: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>MPRIS fixture</h1>
+  <p>
+    Plays a quiet looping tone and publishes a media session, so the Apple Music
+    plugin can be verified without an Apple Music subscription. Nothing here
+    touches the network.
+  </p>
+  <p>What should appear in the bar and panel:</p>
+  <ul>
+    <li>title <code>Fixture Track One</code></li>
+    <li>artist <code>Test Artist</code></li>
+    <li>album <code>Verification Album</code></li>
+    <li>a position counting up to <code>0:20</code></li>
+  </ul>
+  <p id="state"></p>
+
+  <audio id="tone" loop></audio>
+
+  <script>
+    // Chrome hands out no media session at all for clips under about five
+    // seconds, so the tone runs twenty. Built here rather than shipped as a
+    // base64 blob, which keeps the fixture a few KB instead of a few hundred.
+    function toneWav(seconds, hz, amplitude, rate) {
+      const frames = seconds * rate
+      const bytes = new ArrayBuffer(44 + frames * 2)
+      const view = new DataView(bytes)
+      const ascii = (offset, text) => {
+        for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
+      }
+      ascii(0, "RIFF")
+      view.setUint32(4, 36 + frames * 2, true)
+      ascii(8, "WAVEfmt ")
+      view.setUint32(16, 16, true)      // fmt chunk size
+      view.setUint16(20, 1, true)       // PCM
+      view.setUint16(22, 1, true)       // mono
+      view.setUint32(24, rate, true)
+      view.setUint32(28, rate * 2, true)
+      view.setUint16(32, 2, true)       // block align
+      view.setUint16(34, 16, true)      // bits per sample
+      ascii(36, "data")
+      view.setUint32(40, frames * 2, true)
+      for (let i = 0; i < frames; i++) {
+        const sample = amplitude * Math.sin((2 * Math.PI * hz * i) / rate)
+        view.setInt16(44 + i * 2, Math.round(sample * 32767), true)
+      }
+      return new Blob([bytes], { type: "audio/wav" })
+    }
+
+    // A small solid square, enough to prove the artwork path end to end.
+    function artwork() {
+      const canvas = document.createElement("canvas")
+      canvas.width = canvas.height = 256
+      const ctx = canvas.getContext("2d")
+      ctx.fillStyle = "#2b2b36"
+      ctx.fillRect(0, 0, 256, 256)
+      ctx.fillStyle = "#e8e4d9"
+      ctx.font = "bold 34px monospace"
+      ctx.textAlign = "center"
+      ctx.fillText("FIXTURE", 128, 122)
+      ctx.font = "20px monospace"
+      ctx.fillText("ART", 128, 154)
+      return canvas.toDataURL("image/png")
+    }
+
+    const tone = document.getElementById("tone")
+    const state = document.getElementById("state")
+    tone.src = URL.createObjectURL(toneWav(20, 220, 0.18, 8000))
+    // Audible, because audibility is what earns audio focus, but quiet.
+    tone.volume = 0.2
+
+    const start = () => tone.play().then(
+      () => { state.textContent = "playing" },
+      () => { state.textContent = "blocked, retrying (click the page to allow it)"; setTimeout(start, 500) }
+    )
+    start()
+
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: "Fixture Track One",
+        artist: "Test Artist",
+        album: "Verification Album",
+        artwork: [{ src: artwork(), sizes: "256x256", type: "image/png" }]
+      })
+
+      // Registering these is what turns CanGoNext and CanGoPrevious true over
+      // MPRIS. A browser media session leaves that pair false by default, which
+      // is why a video in a tab shows greyed-out skip buttons.
+      for (const action of ["play", "pause", "nexttrack", "previoustrack", "seekto"]) {
+        try { navigator.mediaSession.setActionHandler(action, () => {}) } catch (e) {}
+      }
+
+      const report = () => {
+        if (!tone.duration || !isFinite(tone.duration)) return
+        navigator.mediaSession.setPositionState({
+          duration: tone.duration,
+          playbackRate: 1,
+          position: Math.min(tone.currentTime, tone.duration)
+        })
+      }
+      tone.addEventListener("timeupdate", report)
+      tone.addEventListener("loadedmetadata", report)
+    }
+  </script>
+</body>
+</html>

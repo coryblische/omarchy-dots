@@ -1,0 +1,8 @@
+[tools]
+chezmoi = "2.72.1"
+claude = "latest"
+codex = "latest"
+gh = "latest"
+node = "26.7.0"
+"npm:@xai-official/grok" = "latest"
+opencode = "latest"

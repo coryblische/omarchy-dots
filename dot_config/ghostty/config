@@ -1,0 +1,56 @@
+# Mapped from current Kitty (~/.config/kitty/kitty.conf)
+# plus Omarchy Ghostty defaults that Kitty does not cover.
+
+# Dynamic theme colors (Omarchy current theme)
+config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"
+
+# Font (kitty: font_family BitstromWera Nerd Font, font_size 10.5)
+font-family = "BitstromWera Nerd Font"
+font-style = Regular
+font-size = 10.5
+
+# Interactive shell. Login shell stays bash. (kitty: shell /usr/bin/fish)
+command = /usr/bin/fish
+
+# Window (kitty: window_padding_width 4, background_opacity 0.85,
+# hide_window_decorations yes, confirm_os_window_close 0)
+window-theme = ghostty
+window-padding-x = 4
+window-padding-y = 4
+window-decoration = none
+background-opacity = 0.85
+confirm-close-surface = false
+resize-overlay = never
+gtk-toolbar-style = flat
+
+# Cursor (kitty: cursor_shape beam, cursor_blink_interval 0.5,
+# shell_integration no-cursor)
+cursor-style = bar
+cursor-style-blink = true
+shell-integration-features = no-cursor,ssh-env
+
+# Clipboard / selection (kitty: copy_on_select yes, strip_trailing_spaces never)
+copy-on-select = true
+clipboard-trim-trailing-spaces = false
+
+# Scroll / mouse (kitty: wheel_scroll_multiplier 3.0, mouse_hide_wait 0.0)
+mouse-scroll-multiplier = precision:1,discrete:3
+mouse-hide-while-typing = false
+
+# Keybindings (1:1 from kitty)
+keybind = shift+insert=paste_from_clipboard
+keybind = control+insert=copy_to_clipboard
+# Send Shift+Enter as CSI-u so TUIs can distinguish it from Enter.
+keybind = shift+enter=csi:13;2u
+# Legacy encoding sends Alt+Shift+Enter the same as Alt+Enter; send CSI-u so tmux can match M-S-Enter.
+keybind = alt+shift+enter=csi:13;4u
+
+# Omarchy Ghostty split-resize binds (not from kitty; keep)
+keybind = super+control+shift+alt+arrow_down=resize_split:down,100
+keybind = super+control+shift+alt+arrow_up=resize_split:up,100
+keybind = super+control+shift+alt+arrow_left=resize_split:left,100
+keybind = super+control+shift+alt+arrow_right=resize_split:right,100
+
+# Hyprland slowness workaround (Omarchy default)
+# https://github.com/ghostty-org/ghostty/discussions/3224
+async-backend = epoll

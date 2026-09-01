@@ -1,0 +1,8 @@
+{
+  "excludedApps": {},
+  "includeNeovim": true,
+  "includeVscode": true,
+  "includeZed": true,
+  "selectedNeovimConfig": "",
+  "wallpaperFolder": "/home/cory/Wallpapers"
+}

@@ -1,0 +1,25 @@
+[credential "https://github.com"]
+	helper = 
+	helper = !/home/cory/.local/share/mise/installs/gh/2.98.0/gh_2.98.0_linux_amd64/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/home/cory/.local/share/mise/installs/gh/2.98.0/gh_2.98.0_linux_amd64/bin/gh auth git-credential
+[user]
+	email = "cblische@oxfordclub.com"
+	name = "cory"
+[commit]
+	gpgSign = false
+[pull]
+	rebase = false
+[gui]
+	pruneduringfetch = true
+[smartgit "submodule"]
+	fetchalways = false
+	update = true
+	initializenew = true
+[push]
+	recurseSubmodules = check
+[safe]
+	directory = /home/cory/mnt/mtotd/httpdocs/wp-content
+	directory = /home/cory/mnt/oc-prod/httpdocs/20220406/b1fbd37/wp-content
+	directory = /home/cory/mnt/oc-dev/httpdocs/20220330/ae95348/wp-content

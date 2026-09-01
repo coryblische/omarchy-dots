@@ -1,0 +1,94 @@
+#!/bin/bash
+# Launch, or focus, Apple Music as a standalone app window.
+#
+# The web player carries its own DRM and its own sign-in, so nothing here needs
+# an Apple developer token or a MusicKit key. What it does need is a dedicated
+# --user-data-dir: that is what gives the window its own browser process, its
+# own MPRIS player, and a session independent of the browser you read mail in.
+
+set -uo pipefail
+
+URL="https://music.apple.com"
+WINDOW_CLASS="apple-music"
+PROFILE="${OMARCHY_APPLE_MUSIC_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/ianswope.apple-music/profile}"
+STATUS="$(dirname -- "$(readlink -f -- "$0")")/omarchy-apple-music-status"
+
+die() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+command -v jq >/dev/null 2>&1 || die "jq is required"
+command -v hyprctl >/dev/null 2>&1 || die "hyprctl is required"
+[[ -x $STATUS ]] || die "missing helper: $STATUS"
+
+# The same rule the status helper applies. Refusing it in only one of the two
+# would launch a browser that could then never be found again.
+case $PROFILE in
+*[[:space:]]*) die "profile path must not contain whitespace: $PROFILE" ;;
+esac
+
+# Apple Music is Widevine-gated, so a browser without the module signs in fine
+# and then refuses to play. Chrome and Brave ship it; Arch's chromium does not.
+find_browser() {
+  local candidate
+  if [[ -n ${OMARCHY_APPLE_MUSIC_BROWSER:-} ]]; then
+    command -v "$OMARCHY_APPLE_MUSIC_BROWSER" >/dev/null 2>&1 ||
+      die "OMARCHY_APPLE_MUSIC_BROWSER=$OMARCHY_APPLE_MUSIC_BROWSER is not on PATH"
+    command -v "$OMARCHY_APPLE_MUSIC_BROWSER"
+    return 0
+  fi
+  for candidate in google-chrome-stable google-chrome brave brave-browser vivaldi-stable microsoft-edge-stable; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      command -v "$candidate"
+      return 0
+    fi
+  done
+  if command -v chromium >/dev/null 2>&1; then
+    printf 'warning: only chromium found; Apple Music needs Widevine to play\n' >&2
+    command -v chromium
+    return 0
+  fi
+  die "no Chromium-family browser found; install google-chrome or brave"
+}
+
+# Our own window, found by the pid that owns our profile. Chrome does not apply
+# --class to the Wayland app_id, so the window arrives with an empty class and
+# class matching cannot find it; matching on title would instead catch an
+# ordinary Apple Music tab in whatever browser was already open.
+app_window_address() {
+  local pid=$1
+  hyprctl clients -j 2>/dev/null | jq -r --argjson pid "$pid" '
+    [ .[] | select(.pid == $pid) ] | (.[0].address // empty)
+  '
+}
+
+pid=$("$STATUS" | jq -r '.pid // empty')
+
+if [[ -n $pid ]]; then
+  address=$(app_window_address "$pid")
+  if [[ -n $address ]]; then
+    hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 ||
+      hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+    exit 0
+  fi
+fi
+
+# No window yet. If the profile's browser is already running it answers this by
+# opening one; otherwise this is a cold start.
+browser=$(find_browser) || exit 1
+mkdir -p -- "$PROFILE" || die "cannot create profile directory: $PROFILE"
+
+# uwsm-app keeps the window in the session's scope the way Omarchy's own web
+# apps are launched; running the browser directly is a fine fallback without it.
+if command -v uwsm-app >/dev/null 2>&1; then
+  exec setsid uwsm-app -- "$browser" \
+    --user-data-dir="$PROFILE" \
+    --class="$WINDOW_CLASS" \
+    --app="$URL"
+fi
+
+exec setsid "$browser" \
+  --user-data-dir="$PROFILE" \
+  --class="$WINDOW_CLASS" \
+  --app="$URL"
